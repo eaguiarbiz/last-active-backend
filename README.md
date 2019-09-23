@@ -1,4 +1,7 @@
 # LastActive 1.0
+Back-end code for the LastActive Application.
+
+PS. I'm testing some automated github beta features which might break this code 💀
 
 ## Getting Started
 1. donwload and install mongo db
