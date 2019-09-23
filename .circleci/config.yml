@@ -1,0 +1,139 @@
+version: 2
+aliases:
+    - &working-directory
+        working_directory: ~/circleci-app
+    - &setup-docker
+        setup_remote_docker:
+            version: 18.05.0-ce
+jobs:
+  build:
+    docker:
+      - image: circleci/node:8
+    <<: *working-directory
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "package.json" }}
+      - run: 
+          name: NPM Install
+          command: npm install
+      - save_cache:
+          paths:
+            - node_modules
+          key: dependency-cache-{{ checksum "package.json" }}
+  unit-test:
+    docker:
+      - image: circleci/node:8
+    <<: *working-directory
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "package.json" }}
+      - run:
+          name: Run Unit Tests
+          command: echo testing
+          environment:
+              JEST_JUNIT_OUTPUT: "test-reports/jest/results.xml"
+      - store_test_results:
+          path: test-reports
+  int-test:
+    docker:
+      - image: circleci/node:8
+    <<: *working-directory
+    steps:
+      - checkout
+      - *setup-docker
+      - restore_cache:
+          key: dependency-cache-{{ checksum "package.json" }}
+      - run : 
+          name: Run all dependencies
+          command: docker-compose up -d
+      - run:
+          name: Run Integration Tests
+          command: npm run integration-test-ci
+          environment:
+              JEST_JUNIT_OUTPUT: "test-reports/jest/results.xml"
+      - store_test_results:
+          path: test-reports
+      - run: docker-compose down
+  publish:
+    docker:
+      - image: circleci/python:3.7.0-stretch-node-browsers-legacy
+    <<: *working-directory
+    environment:
+      AWS_DEFAULT_OUTPUT: json
+    steps:
+      - checkout
+      - *setup-docker
+      - run:
+          name: Install awscli
+          command: sudo pip install awscli
+      - run:
+          name: Set Image Tag
+          command: |
+              CIRCLE_SHA1_MIN=$(echo $CIRCLE_SHA1 | cut -c1-8)
+              if [ -z $CIRCLE_BRANCH ];
+              then
+                  echo $CIRCLE_TAG > ./echo-output
+              else
+                  echo $CIRCLE_SHA1_MIN-$CIRCLE_USERNAME > ./echo-output
+              fi
+              echo "Branch ${CIRCLE_BRANCH}"
+              echo "Tag ${CIRCLE_TAG}"
+              echo "Docker Tag $(cat echo-output)"
+      - persist_to_workspace:
+          root: .
+          paths:
+            - echo-output
+      - run: 
+          name: AWS Login
+          command: $(aws ecr get-login --no-include-email --region ca-central-1)
+      - run: 
+          name: Docker Build
+          command: docker build -t $APPLICATION_NAME .
+      - run: 
+          name: Docker Tag
+          command: docker tag $APPLICATION_NAME:latest $AWS_ACCOUNT_ID.dkr.ecr.ca-central-1.amazonaws.com/$APPLICATION_NAME:$(cat echo-output)
+      - run: 
+          name: Docker Push to ECR
+          command: docker push $IMAGE_REPO/$APPLICATION_NAME:$(cat echo-output)
+  deploy:
+    docker:
+      - image: circleci/python:3.7.0-stretch-node-browsers-legacy
+    <<: *working-directory
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/circleci-app
+      - run: echo "Deploying ... " $(cat echo-output)
+      - run:
+          name: Update Dockerrun.aws.json
+          command: sed -i.bak s/ECR_TAG/$(cat echo-output)/g Dockerrun.aws.json
+      - run: cat Dockerrun.aws.json 
+      - run:
+          name: Installing deployment dependencies
+          command: |
+            sudo apt-get -y -qq update
+            sudo apt-get install python-pip python-dev build-essential
+            sudo pip install 'urllib3==1.22' --force-reinstall
+            sudo pip install awsebcli
+      - run:
+          name: Deploying web API
+          command: |
+            git add .
+            eb setenv PORT=$PORT MONGO_URL=$MONGO_URL
+            eb deploy --staged --label version-$(cat echo-output)
+workflows:
+  version: 2
+  branch_pipeline:
+    jobs:
+      - build
+      - unit-test:
+          requires:
+            - build
+      - publish:
+          requires:
+            - unit-test
+      - deploy:
+          requires:
+            - publish

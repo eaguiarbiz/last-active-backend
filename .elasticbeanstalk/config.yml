@@ -1,0 +1,9 @@
+branch-defaults:
+  master:
+    environment: la-eb-last-active-app-prod
+global:
+  application_name: la-eb
+  default_platform: Docker 17.12.0-ce
+  default_region: ca-central-1
+  profile: null
+  sc: git

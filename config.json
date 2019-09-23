@@ -1,0 +1,11 @@
+{
+	"port": 8080,
+	"mongo": {
+		"uri": "mongodb://localhost/lastActive",
+		"testDBUri": "mongodb://localhost/lastActiveTesting"
+	},
+	"secret": "apisecret",
+	"logging": {
+		"logLevel": "info"
+	}
+}

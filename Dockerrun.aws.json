@@ -1,0 +1,24 @@
+{
+    "AWSEBDockerrunVersion": 2,
+    "containerDefinitions": [
+      {
+        "name": "last-active",
+        "image": "505518836992.dkr.ecr.ca-central-1.amazonaws.com/last_active_app_ecr_repo:ECR_TAG",
+        "environment": [
+          {
+            "name": "Container",
+            "value": "{{APPLICATION_NAME}}"
+          }
+        ],
+        "essential": true,
+        "memory": 128,
+        "cpu": 256,
+        "portMappings": [
+          {
+            "hostPort": 80,
+            "containerPort": 8080
+          }
+        ]
+      }
+    ]
+  }
